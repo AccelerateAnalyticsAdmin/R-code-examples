@@ -1,0 +1,57 @@
+## Here, we're doing a quick review of machine learning! 
+
+
+## first, load the packages
+library(dplyr)
+library(caTools)
+library(randomForest)
+library(ROCR)
+
+airlines <- sample_n(airline_full, 10000)
+airlines$Delayed <- ifelse(airlines$dep_delayed_15min == "N", 0, 1)
+validation <- subset(airlines, Year = 2007)
+airlines <- subset(airlines, Year < 2007)
+
+library(caTools)
+set.seed(1234)
+split <- sample.split(airlines, SplitRatio = .75)
+train <- subset(airlines, split == TRUE)
+test <- subset(airlines, split == FALSE)
+
+train$DayOfWeek <- gsub("-","_",train$DayOfWeek)
+train$DayofMonth <- gsub("-","_",train$DayofMonth)
+train$Month <- gsub("-","_",train$Month)
+
+test$Month <- gsub("-","_",test$Month)
+test$DayofMonth <- gsub("-","_",test$DayofMonth)
+test$DayOfWeek <- gsub("-","_",test$DayOfWeek)
+
+trainDummy <- model.matrix(~Year + Month + DayofMonth + DayOfWeek + UniqueCarrier + Origin + Dest, train)
+testDummy <- model.matrix(~Year + Month + DayofMonth + DayOfWeek + UniqueCarrier + Origin + Dest, test)
+
+trainDummy <- as.data.frame(trainDummy)
+testDummy <- as.data.frame(testDummy)
+
+trainDummy$DepTime <- train$DepTime
+testDummy$DepTime <- test$DepTime
+trainDummy$Delayed <- train$Delayed
+testDummy$Delayed <- test$Delayed
+
+trainDummy$`(Intercept)` <- NULL
+testDummy$`(Intercept)` <- NULL
+
+Forest <- randomForest(Delayed ~ . - Year, data = trainDummy, nodesize = 10, ntree = 100)
+
+## Train predictions
+predictForest1 <- predict(Forest, data = trainDummy)
+predROCR1 <- prediction(predictForest1, train$Delayed)
+performance(predROCR1, "auc")@y.values
+
+
+## Test predictions
+predictForest <- predict(Forest, newdata = testDummy)
+predROCR <- prediction(predictForest, test$Delayed)
+performance(predROCR, "auc")@y.values
+
+features <- (importance(Forest))
+features[order(features),]
